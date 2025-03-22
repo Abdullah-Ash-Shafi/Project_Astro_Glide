@@ -1,21 +1,31 @@
+from kivy import Config
+Config.set('graphics', 'width', '900')
+Config.set('graphics', 'height', '400')
+
 import random
 from sys import platform
 from kivy.app import App
-from kivy.graphics import Color, Line, Quad, Triangle
+from kivy.core.audio import SoundLoader
+from kivy.graphics import Color, Line, Quad, Triangle, Rectangle
 from kivy.core.window import Window
-from kivy.properties import NumericProperty, Clock
+from kivy.lang import Builder
+from kivy.properties import NumericProperty, Clock, ObjectProperty, StringProperty
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.widget import Widget
 
+Builder.load_file("menu.kv")
 
-
-class MainWidget(Widget) :
+class MainWidget(RelativeLayout) :
     from transforms import transform, transform_perspective, transform_2D
     from user_actions import on_touch_up, on_touch_down, keyboard_closed, on_keyboard_up, on_keyboard_down
+    #zoom_factor = NumericProperty(1.5)  # Adjust this value for zooming
+
+    menu_widget = ObjectProperty()
     perspective_point_x = NumericProperty()
     perspective_point_y = NumericProperty()
 
     V_NB_LINES = 10
-    V_LINES_SPACING = 0.20     # percentage in screen width
+    V_LINES_SPACING = 0.30     # percentage in screen width
     vertical_lines = []
 
     H_NB_LINES = 8
@@ -40,6 +50,31 @@ class MainWidget(Widget) :
     ship = None
     ship_coordinates = [(0,0), (0,0), (0,0)]
 
+    state_game_over = False
+    state_game_has_started = False
+
+    menu_title = StringProperty("G   A   L   A   X   Y")
+    menu_button_title = StringProperty("START")
+    score = NumericProperty(0)
+    Score_txt = StringProperty("Score : " + "0")
+
+    z_a = NumericProperty(0)
+    score_font_size = NumericProperty(0)
+    img_opacity = NumericProperty(1)
+    opacity_controller = 0.006
+    angle = NumericProperty(0)
+    background_img = StringProperty("")
+
+    # TO DO : Make an Array , Where all image will be maintained
+    bg_images = ["images/bg101.webp", "images/bg102.jpg", "images/bg103.jpg", "images/bg108.jpg"]
+
+    sound_begin = None
+    sound_galaxy = None
+    sound_gameover_impact = None
+    sound_gameover_voice = None
+    sound_music1 = None
+    sound_restart = None
+
 
     def __init__(self, **kwargs):
         super(MainWidget, self).__init__(**kwargs)
@@ -47,8 +82,9 @@ class MainWidget(Widget) :
         self.init_horizontal_lines()
         self.init_tiles()
         self.init_ship()
-        self.pre_fill_tiles_coordinates()
-        self.generate_tiles_coordinates()
+        self.init_audio()
+        self.reset_game()
+
 
         if self.is_desktop() :
             self.keyboard = Window.request_keyboard(self.keyboard_closed, self)
@@ -56,7 +92,41 @@ class MainWidget(Widget) :
             self.keyboard.bind(on_key_up = self.on_keyboard_up)
 
         Clock.schedule_interval(self.update, 1.0/60.0)
+        self.sound_galaxy.play()
 
+    def init_audio(self):
+        self.sound_begin = SoundLoader.load("audio/begin.wav")
+        self.sound_galaxy = SoundLoader.load("audio/galaxy.wav")
+        self.sound_gameover_impact = SoundLoader.load("audio/gameover_impact.wav")
+        self.sound_gameover_voice = SoundLoader.load("audio/gameover_voice.wav")
+        self.sound_music1 = SoundLoader.load("audio/music1.wav")
+        self.sound_restart = SoundLoader.load("audio/restart.wav")
+
+        self.sound_music1.volume = 1
+        self.sound_begin.volume = .25
+        self.sound_galaxy.volume = .25
+        self.sound_gameover_voice.volume = .25
+        self.sound_restart.volume = .25
+        self.sound_gameover_impact.volume = .6
+
+
+    def reset_game(self) :
+        self.current_offset_y = 0
+        self.current_y_loop = 0
+        self.current_speed_x = 0
+        self.current_offset_x = 0
+        self.z_a = 0
+        self.img_opacity = 1
+        self.SPEED_Y = 0.7
+        self.score = 0
+        self.Score_txt = "Score : " + "0"
+        self.background_img = self.bg_images[0]
+
+        self.tiles_coordinates = []
+        self.pre_fill_tiles_coordinates()
+        self.generate_tiles_coordinates()
+
+        self.state_game_over = False
 
 
     def is_desktop(self) :
@@ -246,6 +316,7 @@ class MainWidget(Widget) :
 
 
     def update(self, dt) :
+        self.score_font_size = int(self.size[0]*20.0/700)
         time_factor = dt * 60
         self.update_vertical_lines()
         self.update_horizontal_lines()
@@ -254,19 +325,72 @@ class MainWidget(Widget) :
 
         spacing_y = self.H_LINES_SPACING * self.height
 
-        speed_y = self.SPEED_Y * self.height/100
-        self.current_offset_y += speed_y * time_factor
+        if not self.state_game_over and self.state_game_has_started :
+            speed_y = self.SPEED_Y * self.height/100
+            self.current_offset_y += speed_y * time_factor
 
-        speed_x = self.current_speed_x * self.width/100
-        self.current_offset_x += speed_x * time_factor
+            speed_x = self.current_speed_x * self.width/100
+            self.current_offset_x += speed_x * time_factor
 
-        if self.current_offset_y >= spacing_y :
-            self.current_offset_y = 0
-            self.current_y_loop += 1
-            self.generate_tiles_coordinates()
+            self.z_a += 0.11
+            #if self.z_a > 400 :
+            #self.angle += 0.1
 
-        if not self.check_ship_collision() :
-            print("|_G_A_M_E__O_V_E_R_|")
+
+
+
+            while self.current_offset_y >= spacing_y :
+                self.current_offset_y = 0
+                self.current_y_loop += 1
+                self.score = self.current_y_loop # set score
+                self.Score_txt = "Score : " + str(self.current_y_loop)
+                self.generate_tiles_coordinates()
+
+                # Image Opacity Controlling
+                if self.current_y_loop > 20:
+                    self.img_opacity -= self.opacity_controller
+
+                # Speed Increasing
+                if self.current_y_loop == 20:
+                    self.SPEED_Y *= 2
+
+                # Background Image Changing
+                if self.current_y_loop == 200 :
+                    # self.background_img = self.bg_images[1]
+                    # self.background_img = "images/bg109.webp"
+                    self.background_img = "images/bg110.png"
+                    self.opacity_controller *= -1
+                    self.z_a = 0
+
+
+            if not self.check_ship_collision() :
+                # print("|_G_A_M_E__O_V_E_R_|")
+                self.menu_title = "G  A  M  E    O  V  E  R"
+                self.menu_button_title = "RESTART"
+                self.state_game_over = True
+                self.menu_widget.opacity = 1
+                self.sound_music1.stop()
+                self.sound_gameover_impact.play()
+                Clock.schedule_once(self.play_game_over_voice_sound, 3)
+
+
+    def play_game_over_voice_sound(self, dt) :
+        if self.state_game_over :
+            self.sound_gameover_voice.play()
+
+
+    def on_menu_button_pressed(self) :
+        if self.state_game_over :
+            self.sound_gameover_impact.stop()
+            self.sound_restart.play()
+        else :
+            self.sound_begin.play()
+        #self.sound_music1.loop = True
+        self.sound_music1.play()
+        self.reset_game()
+        self.state_game_has_started = True
+        self.menu_widget.opacity = 0
+        # print("op")
 
 class GalaxyApp(App) :
     pass

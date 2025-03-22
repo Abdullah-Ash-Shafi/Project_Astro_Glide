@@ -1,5 +1,38 @@
+#:import menu menu
+
 MainWidget :
 
 <MainWidget> :
+    #zoom_factor: 1.5  # Adjust zoom level here
+
+    canvas.before:
+        PushMatrix
+        Rotate:
+            angle: root.angle  # Change this to your desired angle (in degrees)
+            origin: self.center  # Rotates around the center of the widget
+
+        Color :
+            rgba : 1, 1, 1, root.img_opacity
+
+        Rectangle:
+            size: self.size[0] + root.z_a, self.size[1] + root.z_a
+            pos: self.pos
+            # pos: (self.x - (self.width * 0.25*2), self.y - (self.height * 0.25*2))  # Adjust position
+            source: self.background_img
+        PopMatrix
+
+
+
+    menu_widget : menu_widget
     perspective_point_x : self.width/2
     perspective_point_y : self.height*0.75
+
+    Label :
+        text : root.Score_txt
+        font_name : 'fonts/Eurostile.ttf'
+        font_size : dp(root.score_font_size)
+        size_hint : 0.18, 0.18
+        pos_hint : {'x' : 0, 'top' : 1}
+
+    MenuWidget :
+        id : menu_widget
